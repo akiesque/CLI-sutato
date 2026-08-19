@@ -1,6 +1,6 @@
 import chalk from "chalk";
 
-export const primary =chalk.hex('#e3afc3');
+export const primary = chalk.hex('#e3afc3');
 export const secondary = chalk.hex('#97c999');
 export const title = chalk.hex('#7b6dd6').bold;
 

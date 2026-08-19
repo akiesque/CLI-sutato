@@ -1,12 +1,13 @@
-#!/usr/bin/env node --import=tsx/esm
-import * as c from "./content";
+#!/usr/bin/env node
+
+import * as c from "./content.ts";
 import * as p from "@clack/prompts";
 import chalk from "chalk";
 import path from "path";
 import os from "os";
 import { promisify } from 'util';
 import { exec } from 'child_process';
-import fs from 'node:fs/promises';
+import { spawnMagicSpinner } from "./loopy.ts";
 
 const execute = promisify(exec);
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -38,6 +39,7 @@ async function sutato() {
         options: [
             { value: "python", label: "Python", hint: "runs uv with a virtual environment setup" },
             { value: "typescript", label: "Typescript", hint: "runs vite@latest + typescript" },
+            { value: "tauri", label: "Tauri", hint: "runs tauri-app@latest + react" },
             {value: "electron", label: "Electron", hint: "runs electron + ts with a basic setup"},
         ],
     });
@@ -48,6 +50,21 @@ async function sutato() {
     }
 
         p.log.success(chalk.red("TYPE setup 完成しました!⋆˙⟡♡"));
+
+    const lang = await p.select({
+        message: c.secondary("Project Language:"),
+        options: [
+            { value: "typescript", label: "Typescript", hint: "hoho u know this one" },
+            { value: "javascript", label: "Javascript", hint: "this one is on 50/50 mode" }
+        ],
+    });
+
+    if (p.isCancel(lang)) {
+        p.log.error(chalk.red("スタト setup is cancelled!⋆˙⟡♡"));
+        process.exit(0);
+    }
+
+        p.log.success(chalk.red("LANGUAGE setup 完成しました!⋆˙⟡♡"));
 
 
     // Setup confirmation
@@ -62,14 +79,14 @@ async function sutato() {
 
     if (conf) {
         const spin = p.spinner();
-        spin.start(c.primary('Creating project...'));
+        const magicSpinner = spawnMagicSpinner(spin, c.primary);
         if (type === "python") {
             try {
-            spin.message(c.primary('Setting up Python project...'));
+            magicSpinner.start();
             process.chdir(path.resolve(process.cwd(), DEFAULT_PATH));
             await sleep(1000); // Simulate some delay for better UX
             await execute(`uv init ${name.toString()}`);
-            spin.message(c.primary('Setting up virtual environment...'));
+            // spin.message(c.primary('Setting up virtual environment...'));
             process.chdir(path.resolve(process.cwd(), name.toString()));
             await sleep(1000);
             await execute(`uv venv`);
@@ -87,16 +104,16 @@ async function sutato() {
           }
         if (type === "typescript") {
             try {
-            spin.message(c.primary('Setting up Typescript project...'));
+            magicSpinner.start();
             process.chdir(path.resolve(process.cwd(), DEFAULT_APP_PATH));
             await sleep(1000);
-            await execute(`npm create vite@latest ${name.toString()} -- --template react-ts`);
-            spin.message(c.primary('Installing dependencies...'));
-            const COMPONENT_FOLDER = path.join(name.toString(), "src");
-            process.chdir(path.resolve(process.cwd(), COMPONENT_FOLDER));
+            const temp = lang === "typescript" ? "react-ts" : "react";
+            await execute(`npm create vite@latest ${name.toString()} -- --template ${temp}`);
+            // spin.message(c.primary('Installing dependencies...'));
+            const COMPONENT_FOLDER = path.resolve(DEFAULT_APP_PATH, name.toString(), "src");
             await sleep(1000);
-            await execute(`mkdir components`);
-            spin.message(c.primary('Adding components folder...'));
+            await execute(`mkdir ${COMPONENT_FOLDER}}`);
+            // spin.message(c.primary('Adding components folder...'));
 
             if (spin.isCancelled){
                 return;
@@ -111,16 +128,40 @@ async function sutato() {
     }
         if (type === "electron") {
             try{
-            spin.message(c.primary('Setting up Electron project...'));
+            magicSpinner.start();
             await sleep(2000);
             process.chdir(path.resolve(process.cwd(), DEFAULT_APP_PATH));
-            await execute(`npm create vite@latest ${name.toString()} -- --template electron-ts`);
-            spin.message(c.primary('Installing dependencies...'));
-            const COMPONENT_FOLDER = path.join(name.toString(), "src");
-            process.chdir(path.resolve(process.cwd(), COMPONENT_FOLDER));
+            const temp = lang === "typescript" ? "--ts" : "";
+            await execute(`npm create @quick-start/electron@latest ${name.toString()} -- -t react ${temp} --skip`);
+            // spin.message(c.primary('Installing dependencies...'));
+            const pathDir = path.resolve(DEFAULT_APP_PATH, name.toString(), "src", "renderer", "src");
+            const COMPONENT_FOLDER = path.join(pathDir, "components");
             await sleep(2000);
-            await execute(`mkdir components`);
-            spin.message(c.primary('Adding components folder...'));
+            await execute(`mkdir ${COMPONENT_FOLDER}`);
+            // spin.message(c.primary('Adding your stuff...'));
+
+            if (spin.isCancelled){
+                return;
+            }
+            spin.stop(c.title('Project created successfully!'));
+        } catch (error) { 
+            spin.error(c.title('Failed to create project!'));
+            p.log.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
+            process.exit(1);
+    }
+    }
+        if (type === "tauri") {
+            try{
+            magicSpinner.start();
+            await sleep(2000);
+            process.chdir(path.resolve(process.cwd(), DEFAULT_APP_PATH));
+            const temp = lang === "typescript" ? "react-ts" : "react";
+            await execute(`npm create tauri-app@latest ${name.toString()} -- --template ${temp} -y`);
+            // spin.message(c.primary('Installing dependencies...'));
+            const COMPONENT_FOLDER = path.resolve(DEFAULT_APP_PATH, name.toString(), "src", "components");
+            await sleep(2000);
+            await execute(`mkdir ${COMPONENT_FOLDER}`);
+            // spin.message(c.primary('Adding more flair...'));
 
             if (spin.isCancelled){
                 return;
@@ -134,13 +175,13 @@ async function sutato() {
     }
         spin.stop(c.title('Base project created successfully!'));
 
-        if (type === "typescript" || type === "electron") {
+        if (type === "typescript" || type === "electron" || type === "tauri") {
             const addFramework = await p.confirm({
                 message: c.primary("Would you like to add additional frameworks?"),
             });
 
             if (p.isCancel(addFramework)) {
-                p.log.info(c.secondary('Operation cancelled'));
+                p.log.info(c.secondary('わかりました！Operation cancelled!'));
                 process.exit(0);
             }
             else if (addFramework) {  
@@ -172,8 +213,8 @@ async function sutato() {
 
             if (packages.length > 0) {
                 try {
-                spin.message(c.primary('Joining packages for best outcome...'));
-                spin.message(c.primary('Battling cosmic entities...'));
+                // spin.message(c.primary('Joining packages for best outcome...'));
+                // spin.message(c.primary('Battling cosmic entities...'));
                 await execute (`npm install ${packages.join(' ')}`);
                 spin.stop(c.title('Selected frameworks installed successfully!'));
                 p.log.success(c.primary('Your project is aesthetically done~'));
